@@ -1,0 +1,113 @@
+---
+title: "main"
+output: html_document
+date: "2025-07-28"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(tidyverse)
+library(lubridate)
+```
+
+```{r}
+# List all CSV files in the current directory
+plots <- list()
+csv_files <- list.files(pattern = "\\.csv$", full.names = FALSE)
+
+for (file in csv_files) {
+  df_name <- tools::file_path_sans_ext(file)
+  
+  # Read and clean CSV
+  df <- read.csv(file, stringsAsFactors = FALSE, skip = 3)
+
+  if (ncol(df) >= 2) {
+    colnames(df)[2] <- df_name
+
+    if ("Date" %in% colnames(df)) {
+      df$Date <- my(df$Date)
+    }
+
+    df[[df_name]] <- as.numeric(df[[df_name]])
+  }
+
+  df <- na.omit(df)
+
+  # Convert to long format so ggplot can use one y and one label
+  df_long <- df %>%
+    select(Date, all_of(df_name)) %>%
+    pivot_longer(cols = -Date, names_to = "Area", values_to = "Price")
+  
+  plot_title <- tools::toTitleCase(gsub("_", " ", df_name))
+
+  # Plot using 'Area' as dynamic label
+  p <- ggplot(df_long, aes(x = Date, y = Price, color = Area)) +
+  geom_line(size = 1) +
+  geom_smooth(method = "loess", se = FALSE, linetype = "dashed") +
+  labs(
+    title = plot_title,
+    x = "Date",
+    y = "Value"
+  ) +
+  theme_classic()  # consistent color
+  
+  plots[[df_name]] <- p
+  assign(df_name, df, envir = .GlobalEnv)
+}
+
+# View all plots in RStudio tab viewer
+for (p in plots) {
+  print(p)
+}
+```
+
+
+```{r}
+# Prepare data
+df_condo <- median_sale_condo |>
+  select(Date, Value = median_sale_condo) |>
+  mutate(Type = "Condo")
+
+df_sfr <- median_sale_sfr |>
+  select(Date, Value = median_sale_sfr) |>
+  mutate(Type = "SFR")
+
+df_combined <- bind_rows(df_condo, df_sfr)
+
+# Define cool colors for main lines and brighter tones for trendlines
+main_colors <- c("Condo" = "#3182bd", "SFR" = "#756bb1")        # dark blue, purple
+trend_colors <- c("Condo" = "#6baed6", "SFR" = "#9e9ac8")       # lighter versions
+
+# Base plot
+prices <- ggplot(df_combined, aes(x = Date, y = Value)) +
+  geom_line(aes(color = Type), size = 1) +
+  # Add LOESS trendlines manually for each Type
+  geom_smooth(data = df_combined |> filter(Type == "Condo"),
+              method = "loess", se = FALSE, linetype = "dashed",
+              color = trend_colors["Condo"]) +
+  geom_smooth(data = df_combined |> filter(Type == "SFR"),
+              method = "loess", se = FALSE, linetype = "dashed",
+              color = trend_colors["SFR"]) +
+  scale_color_manual(values = main_colors) +
+  scale_y_continuous(labels = scales::label_comma())+
+  labs(
+    title = "Comparison: median_sale_condo vs median_sale_sfr",
+    x = "Date",
+    y = "Value",
+    color = "Series"
+  ) +
+  theme_classic()
+
+print(prices)
+
+
+
+```
+
+
+```{r}
+
+```
+
+
